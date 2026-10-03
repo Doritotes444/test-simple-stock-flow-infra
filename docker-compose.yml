@@ -1,0 +1,78 @@
+services:
+  db:
+    image: mysql:8.4
+    container_name: stock_flow_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_secret_pass}
+      MYSQL_DATABASE: ${DB_DATABASE:-simple_stock_flow}
+      MYSQL_USER: ${DB_USERNAME:-stock_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-stock_secret_pass}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root_secret_pass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stock_network
+
+  api:
+    build:
+      context: ../test-simple-stock-flow-api
+      dockerfile: Dockerfile
+    container_name: stock_flow_api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ../test-simple-stock-flow-api:/var/www/html
+      - api_vendor:/var/www/html/vendor
+    environment:
+      APP_NAME: "Simple Stock Flow API"
+      APP_ENV: local
+      APP_KEY: base64:eU9xYnp0aGlzc2VjdXJlYmFzZTY0a2V5MTIzNDU2Nzg=
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-simple_stock_flow}
+      DB_USERNAME: ${DB_USERNAME:-stock_user}
+      DB_PASSWORD: ${DB_PASSWORD:-stock_secret_pass}
+      JWT_SECRET: super_jwt_secret_key_1234567890_sena
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - stock_network
+
+  app:
+    build:
+      context: ../test-simple-stock-flow-app
+      dockerfile: Dockerfile
+    container_name: stock_flow_app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:80"
+    volumes:
+      - ../test-simple-stock-flow-app:/app
+      - app_node_modules:/app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+    depends_on:
+      - api
+    networks:
+      - stock_network
+
+volumes:
+  db_data:
+  api_vendor:
+  app_node_modules:
+
+networks:
+  stock_network:
+    driver: bridge
